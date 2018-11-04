@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include <cstdlib>
 #include <math.h> 
+#include <vector> 
 
 
 //For Gaussian noise: https://stackoverflow.com/questions/32889309/adding-gaussian-noise
@@ -92,13 +93,10 @@ class PfPoseNode{
 
 
 ///////////////////// POSITIONING LOOP (PARTICLE FILTER) ////////////////////////////////////////
-	void positioningLoop(){   //Resamples and broadcasts new center of mass as best guess of pose
+	void positioningLoop(std::vector<Particle> particles){ //Resamples and broadcasts new center of mass as best guess of pose
 
 		ros::Time msg_time = ros::Time::now();
-		
-//		if(particles == Null){   HELP: How to have an initial set of particles and then loop by updating each time?
-           
-		Particle particles[M];
+		          
 
 						//Assign weights (importance factor) to particles	
 		double CDF[M]; //Comulative distribution function for the weights
@@ -181,7 +179,7 @@ class PfPoseNode{
 	 	double theta_cof = thetam_sum/m_sum;
 		//Publish this as the estimated pose, new topic pf_pose
 	
-		}
+		
 
 		 
 	      //Publish the pf_pose over TF    AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA!!!!!!!!!!!!
@@ -198,7 +196,8 @@ class PfPoseNode{
 
 		pf_pose_broadcaster.sendTransform(pf_trans);
 		//ROS_INFO("Position (x,y,phi) = (%f,%f,%f)", x,y,phi);
-
+		
+		}
 			
 
 
@@ -305,7 +304,7 @@ int main(int argc, char **argv)
   	ros::spin();
 	
 	//Initialize the particles. The constructor does this UNIFORMLY!
-//	Particle particles[M];
+	std::vector <Particle> particles(M);
 	ros::init(argc, argv,"pf_pose_est");
 	PfPoseNode pf_pose_est;
 
@@ -313,7 +312,7 @@ int main(int argc, char **argv)
 
 	while(ros::ok())
 	{
-		pf_pose_est.positioningLoop();
+		pf_pose_est.positioningLoop(particles);
 		ros::spinOnce();
 		loop_rate.sleep();
 	}
