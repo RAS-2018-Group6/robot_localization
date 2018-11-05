@@ -97,13 +97,10 @@ public:
 
 
     ///////////////////// POSITIONING LOOP (PARTICLE FILTER) ////////////////////////////////////////
-    void positioningLoop(){   //Resamples and broadcasts new center of mass as best guess of pose
+    void positioningLoop(std::vector<Particle> particles){   //Resamples and broadcasts new center of mass as best guess of pose
         ROS_INFO("Running positioning loop.");
         //ros::Time msg_time = ros::Time::now();
 
-        //		if(particles == Null){   HELP: How to have an initial set of particles and then loop by updating each time?
-
-        Particle particles[M];
 
         //Assign weights (importance factor) to particles
         double CDF[M]; //Comulative distribution function for the weights
@@ -112,16 +109,16 @@ public:
         for(int i=0; i< M; i++)
         {
             particles[i].m = get_weight(particles[i]);  //updates weight
-            cumsum += particles[i].m;   //use this weight for the CDF
+            cumsum += (double) particles[i].m;   //use the weight for the CDF, double as to compare with r below
             CDF[i] = cumsum;  //Not normalized, therefor use final cumsum to compute r below
         }
 
         //Resample M new particles randomly according to weight
-        Particle new_particles[M];
+		std::vector <Particle> new_particles(M);
         int ind = 0;
 
         //And move particles based on control input (speeds) with added noise
-        double dt = 1; //How to get time between particle updates???
+        double dt = 1; //How to get time between particle updates??? Hardcode and tweek?
         float v = linear_x;
         float omega = angular_z;
 
@@ -156,11 +153,11 @@ public:
         //if almost all weight extremely small:
         //resample
 
-        //		particles = new_particles; Doesnt work, do the following instead://HELP: Pointers more efficient?
+        particles = new_particles; //Seems to work for vectors?//HELP: Pointers more efficient?
 
-        for(int i=0; i< M; i++){
-            particles[i] = new_particles[i];
-        }
+//        for(int i=0; i< M; i++){    //If above doesnt work
+ //           particles[i] = new_particles[i];
+  //      }
 
         //The center of mass of the particles will give the best estimate of the position:
 
@@ -187,7 +184,7 @@ public:
         double x_cof = xm_sum/m_sum;
         double y_cof = ym_sum/m_sum;
         double theta_cof = thetam_sum/m_sum;
-        //Publish this as the estimated pose, new topic pf_pose
+        //Broadcast this as the estimated pose
 
 
 
@@ -278,13 +275,14 @@ public:
 
         for(int i = 0; i < pointcloud.points.size(); i++)
         {
-            x = particle.x + pointcloud.points[i].x; //IS THIS RIGHT???
+            x = particle.x + pointcloud.points[i].x; //IS THIS RIGHT??? Only if the point cload transform is to global coordinates
             y = particle.y + pointcloud.points[i].y;
-
+	
             map_index = round(x/mapResolution)*mapWidth+round(y/mapResolution); // map array cell index
-
-            //probValue = current_map.data[map_index]; // going to get index out of bounds all the time
-            probValue = 0;
+	
+			if(map_index >= current_map.data.size() ){probValue = 0;}   // Maybe to solve problem just below???
+            probValue = current_map.data[map_index]; // going to get index out of bounds all the time
+            //probValue = 0;
 
             if(probValue > 20){
                 valueSum += probValue;
@@ -319,10 +317,8 @@ public:
 
 int main(int argc, char **argv)
 {
-    //ros::spin();
-
     //Initialize the particles. The constructor does this UNIFORMLY!
-    //	Particle particles[M];
+	std::vector <Particle> particles(M);
     ros::init(argc, argv,"pf_pose_est");
     PfPoseNode pf_pose_est;
 
@@ -330,7 +326,7 @@ int main(int argc, char **argv)
 
     while(ros::ok())
     {
-        pf_pose_est.positioningLoop();
+        pf_pose_est.positioningLoop(particles);
         ros::spinOnce();
         loop_rate.sleep();
     }
