@@ -20,6 +20,9 @@
 #include <math.h>
 
 
+#include "/home/ras16/catkin_ws/src/robot_position/actionlib_movement/src/create_path.cpp"
+
+
 //For Gaussian noise: https://stackoverflow.com/questions/32889309/adding-gaussian-noise
 //#include <iostream>
 
@@ -159,7 +162,7 @@ public:
 
           //Define Gaussian noise   HELP: fix this!!!
           const double mean = 0.0;
-          const double stddev = 0.01;
+          const double stddev = 0.1;
           std::default_random_engine generator;
           std::normal_distribution<double> dist(mean, stddev);
           std::random_device rd{};
@@ -179,7 +182,7 @@ public:
               //ROS_INFO("Index: %i, Random: %f", idx,r);
               it->x = particles[idx].x + dx*cos(particles[idx].theta) + d(gen); //Gaussian noise
               it->y = particles[idx].y + dy*sin(particles[idx].theta) + d(gen);
-              it->theta = particles[idx].theta; //+ d(gen);
+              it->theta = particles[idx].theta + d(gen);
           }
 
           for(std::vector<Particle>::iterator it = new_particles.begin(); it != new_particles.end(); ++it){
@@ -380,7 +383,9 @@ int main(int argc, char **argv)
 
     ros::init(argc, argv,"pf_pose_est");
     PfPoseNode pf_pose_est;
-
+//    PathCreator smoothmap;
+//    smoothmap.mapMatrix();
+    //smoothmap.smoothMap();
     ros::Rate loop_rate(1);
 
     while(ros::ok())
