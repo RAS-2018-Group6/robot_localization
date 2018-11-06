@@ -6,7 +6,7 @@
 #include <nav_msgs/Odometry.h>
 
 #include <sensor_msgs/LaserScan.h>
-#include <sensor_msgs/PointCloud.h>
+//#include <sensor_msgs/PointCloud.h>
 
 #include <laser_geometry/laser_geometry.h>
 
@@ -19,8 +19,6 @@
 #include <cstdlib>
 #include <math.h>
 
-
-#include "/home/ras16/catkin_ws/src/robot_position/actionlib_movement/src/create_path.cpp"
 
 
 //For Gaussian noise: https://stackoverflow.com/questions/32889309/adding-gaussian-noise
@@ -51,7 +49,7 @@ public:
         double r3 = ((double) rand() / (RAND_MAX));
 
         x = r1*1.5;  //r1*mapWidth*mapResolution/10.0; //10 since we know initial pose close to origin!
-        y = r2*1.5;  //r2*mapLength*mapResolution/10.0;
+        y = r2*1.5;  //r2*mapHeight*mapResolution/10.0;
         theta = r3*2*M_PI; //Or does theta go from -pi to pi?
         m = 1.0/M;
     }
@@ -65,7 +63,7 @@ class PfPoseNode{
 
 private:
     double mapWidth;
-    double mapLength;
+    double mapHeight;
     double mapResolution;
     double range_min;
     double range_max;
@@ -80,7 +78,7 @@ private:
     float angular_z;
     nav_msgs::Odometry position_msg;
     nav_msgs::OccupancyGrid current_map;
-    sensor_msgs::PointCloud pointcloud;
+    //sensor_msgs::PointCloud pointcloud;
     tf::TransformListener tf_listener;
     std::vector <Particle> particles;
 
@@ -103,8 +101,8 @@ public:
         laser_scan_received = false;
 
         position_pub = n.advertise<nav_msgs::Odometry>("/particle_position",1);
-        measurement_sub = n.subscribe<sensor_msgs::LaserScan>("/scan",10,&PfPoseNode::readScan,this);
-        gridmap_sub = n.subscribe<nav_msgs::OccupancyGrid>("/grid_map",1,&PfPoseNode::readMap,this);
+        measurement_sub = n.subscribe<sensor_msgs::LaserScan>("/scan",1,&PfPoseNode::readScan,this);
+        gridmap_sub = n.subscribe<nav_msgs::OccupancyGrid>("/smooth_map",1,&PfPoseNode::readMap,this);
         velocity_sub = n.subscribe<geometry_msgs::Twist>("/motor_controller/twist",1,&PfPoseNode::velocityCallback,this);
     }
 
@@ -147,17 +145,22 @@ public:
           int ind = 0;
 
           //And move particles based on control input (speeds) with added noise
-          double dt = 1; //How to get time between particle updates??? Hardcode and tweek?
+          double dt = 0.1; //set 1/looprate?
           float v = linear_x;
           float omega = angular_z;
-          double dx, dy;
+          double dx_robotframe, dy_robotframe, dx, dy;
           if(omega == 0.0){
-            dx = v*dt;
+            dx = v*dt; //_robotframe
             dy = 0.0;
+		//change to mapframe
+	//	dx = dx_robotframe*cos(theta_cof) - dy_robotframe*cos(M_PI/2 - theta_cof)
           }
           else{
             dx = v/omega * sin(omega*dt) + v*dt;
             dy = v/omega *( 1 - cos(omega*dt) );
+		//Change to mapframe
+	//	dx = dx_robotframe*cos(theta_cof) - dy_robotframe*cos(M_PI/2 - theta_cof);
+	//	dy = dx_robotframe*sin(theta_cof) + dy_robotframe*sin(M_PI/2 - theta_cof);
           }
 
           //Define Gaussian noise   HELP: fix this!!!
@@ -180,8 +183,18 @@ public:
                   idx ++;
               }
               //ROS_INFO("Index: %i, Random: %f", idx,r);
-              it->x = particles[idx].x + dx*cos(particles[idx].theta) + d(gen); //Gaussian noise
-              it->y = particles[idx].y + dy*sin(particles[idx].theta) + d(gen);
+              double x_toCheck = particles[idx].x + dx*cos(particles[idx].theta) + d(gen); //Gaussian noise
+              double y_toCheck = particles[idx].y + dy*sin(particles[idx].theta) + d(gen);
+              double theta = particles[idx].theta + d(gen);
+
+              if(x_toCheck < 0.0 || y_toCheck < 0.0 || x_toCheck > mapHeight || y_toCheck > mapWidth){
+                it->x = particles[idx].x;
+                it->y = particles[idx].y;
+              }
+              else{
+                it->x = x_toCheck; //Gaussian noise
+                it->y = y_toCheck;
+              }
               it->theta = particles[idx].theta + d(gen);
           }
 
@@ -283,8 +296,8 @@ public:
         ROS_INFO("Read Map");
         map_received = true;
         current_map = map_msg;
-        mapWidth = map_msg.info.width; // number of rows
-        mapLength = map_msg.info.height; // number of columns
+        mapWidth = map_msg.info.width; // number of rows (y)
+        mapHeight = map_msg.info.height; // number of columns (x)
         mapResolution = map_msg.info.resolution;
     }
 
@@ -298,14 +311,16 @@ public:
 
     void readScan(const sensor_msgs::LaserScan scan_msg){
 
-        /*
+	laser_scan_received = true;
         measurements = scan_msg.ranges;
         range_min = scan_msg.range_min;
         range_max = scan_msg.range_max;
         angle_min = scan_msg.angle_min;
         angle_increment = scan_msg.angle_increment; // not needed anymore
-        */
+
         //ROS_INFO("Transform Laser scan");
+
+        /*
         laser_scan_received = true;
         laser_geometry::LaserProjection projector;
 
@@ -319,6 +334,7 @@ public:
             ROS_ERROR("Transform error in map node: %s", ex.what());
             return;
         }
+        */
     }
 
     ////////////////////
@@ -330,10 +346,11 @@ public:
 
         valueSum = 0;
 
-        for(int i = 0; i < pointcloud.points.size(); i++)
+        for(int i = 0; i < measurements.size(); i++)
         {
-            x = particle.x + pointcloud.points[i].x; //IS THIS RIGHT??? Only if the point cload transform is to global coordinates
-            y = particle.y + pointcloud.points[i].y;
+            double mapFrameAngle = particle.theta + range_min + i*angle_increment + M_PI/2;
+            x = particle.x + measurements[i]*cos(mapFrameAngle);
+            y = particle.y + measurements[i]*sin(mapFrameAngle);
 
             map_index = round(x/mapResolution)*mapWidth+round(y/mapResolution); // map array cell index
 
@@ -386,13 +403,14 @@ int main(int argc, char **argv)
 //    PathCreator smoothmap;
 //    smoothmap.mapMatrix();
     //smoothmap.smoothMap();
-    ros::Rate loop_rate(1);
+    ros::Rate loop_rate(10);
 
     while(ros::ok())
     {
-        pf_pose_est.positioningLoop();
+        
         ROS_INFO("Test");
         ros::spinOnce();
+	pf_pose_est.positioningLoop();
         loop_rate.sleep();
         ROS_INFO("The main loop");
     }
