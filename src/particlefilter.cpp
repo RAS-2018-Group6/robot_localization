@@ -192,8 +192,8 @@ public:
               }
               //ROS_INFO("Index: %i, Random: %f", idx,r);
 							double w = particles[idx].theta;
-              double x_toCheck = particles[idx].x + dx*sin(w) + dy*sin(M_PI/2-w) + d(gen); //Gaussian noise
-              double y_toCheck = particles[idx].y + dx*cos(w) + dy*cos(M_PI/2-w) + d(gen);
+              double x_toCheck = particles[idx].x + dx*cos(w) + dy*sin(M_PI/2-w) + d(gen); //Gaussian noise
+              double y_toCheck = particles[idx].y + dx*sin(w) - dy*cos(M_PI/2-w) + d(gen);
               double theta_toCheck = particles[idx].theta + dtheta + d(gen); //maybe have more noise in radians?
 
 							//First check that the new particles will be inside of the map, otherwise just keep the old particle's pose
@@ -371,14 +371,14 @@ public:
         {
             if(measurements[i] > range_min && measurements[i] < range_max && !( std::isnan(measurements[i])) ){
               double mapFrameAngle = particle.theta + i*angle_increment; // + M_PI/2;
-              x = particle.x + measurements[i]*sin(mapFrameAngle);
-              y = particle.y + measurements[i]*cos(mapFrameAngle);
+              x = particle.x + measurements[i]*cos(mapFrameAngle);
+              y = particle.y + measurements[i]*sin(mapFrameAngle);
 
               if(x < 0.0 || y < 0.0 || x > mapHeight || y > mapWidth){
                 probValue = 0;
               }
 
-              map_index = round(y/mapResolution)*mapHeight+round(x/mapResolution); // map array cell index
+              map_index = round(y/mapResolution)*mapWidth+round(x/mapResolution); // map array cell index
 
   			      if(map_index >= current_map.data.size() )
               {
