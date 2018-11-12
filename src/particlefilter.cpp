@@ -17,7 +17,7 @@
 //#include <random>
 #include <stdlib.h>
 #include <cstdlib>
-#include <math.h>
+#include <cmath>
 
 
 
@@ -26,8 +26,8 @@
 
 
 
-#define M 10 //Choose number of particles (will be used in fraction)
-#define loopRate 5 //Choose how often to resample particles
+#define M 100 //Choose number of particles (will be used in fraction)
+#define loopRate 10 //Choose how often to resample particles
 // topic /grid_map   one long vector type int8[]
 // ros MapMetaData
 // use lidar measages straight away
@@ -173,7 +173,7 @@ public:
 
           //Define Gaussian noise   HELP: fix this!!!
           const double mean = 0.0;
-          const double stddev = 0.0;    ///0 when debugging!!!!!!!!!
+          const double stddev = 0.04;    ///0 when debugging!!!!!!!!!
           std::default_random_engine generator;
           std::normal_distribution<double> dist(mean, stddev);
           std::random_device rd{};
@@ -192,17 +192,17 @@ public:
               }
               //ROS_INFO("Index: %i, Random: %f", idx,r);
 							double w = particles[idx].theta;
-              double x_toCheck = particles[idx].x - dx*cos(w) + dy*cos(M_PI/2-w) + d(gen); //Gaussian noise
-              double y_toCheck = particles[idx].y + dx*sin(w) + dy*sin(M_PI/2-w) + d(gen);
-              double theta_toCheck = particles[idx].theta + dtheta + d(gen)*2; //maybe have more noise in radians?
-				
+              double x_toCheck = particles[idx].x + dx*sin(w) + dy*sin(M_PI/2-w) + d(gen); //Gaussian noise
+              double y_toCheck = particles[idx].y + dx*cos(w) + dy*cos(M_PI/2-w) + d(gen);
+              double theta_toCheck = particles[idx].theta + dtheta + d(gen); //maybe have more noise in radians?
+
 							//First check that the new particles will be inside of the map, otherwise just keep the old particle's pose
               if(x_toCheck < 0.0 || y_toCheck < 0.0 || x_toCheck > mapHeight || y_toCheck > mapWidth){
                 it->x = particles[idx].x;
                 it->y = particles[idx].y;
               }
               else{
-                it->x = x_toCheck; //Gaussian noise
+                it->x = x_toCheck;
                 it->y = y_toCheck;
               }
 							if(theta_toCheck > 2*M_PI){
@@ -307,6 +307,7 @@ public:
 
 
 
+
     /////////// CALLBACK FUNCTIONS ///////////////////////
 
     void readMap(const nav_msgs::OccupancyGrid map_msg)
@@ -314,18 +315,18 @@ public:
         ROS_INFO("Read Map");
         map_received = true;
         current_map = map_msg;
-        mapWidth = map_msg.info.width; // number of rows (y)
-        mapHeight = map_msg.info.height; // number of columns (x)
+        mapWidth = map_msg.info.width; // number of columns (y)
+        mapHeight = map_msg.info.height; // number of rows (x)
         mapResolution = map_msg.info.resolution;
     }
 
     void velocityCallback(const nav_msgs::Odometry::ConstPtr& msg){
-        //ROS_INFO("velocityCallback velocity linear: %f, velocity angular: %f", msg->linear.x,msg->angular.z);
+        //ROS_INFO("velocityCallback velocity linear: %f, velocity angular: %f", msg->linear.x, msg->angular.z);
         //ROS_INFO("Velocity callback");
         linear_x = (float) msg-> twist.twist.linear.x;   //linear.x;
         angular_z = (float) msg-> twist.twist.angular.z;   //angular.z;
-				//ROS_INFO("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");				
-				ROS_INFO("x %f and z %f", linear_x, angular_z);
+				//ROS_INFO("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+				ROS_INFO("linear_speed %f and angular_speed %f", linear_x, angular_z);
         //I use both to move particles
     }
 
@@ -368,27 +369,33 @@ public:
 
         for(int i = 0; i < measurements.size(); i++)
         {
-            double mapFrameAngle = particle.theta + range_min + i*angle_increment; // + M_PI/2;
-            x = particle.x + measurements[i]*cos(mapFrameAngle);
-            y = particle.y + measurements[i]*sin(mapFrameAngle);
+            if(measurements[i] > range_min && measurements[i] < range_max && !( std::isnan(measurements[i])) ){
+              double mapFrameAngle = particle.theta + i*angle_increment; // + M_PI/2;
+              x = particle.x + measurements[i]*sin(mapFrameAngle);
+              y = particle.y + measurements[i]*cos(mapFrameAngle);
 
-            map_index = round(x/mapResolution)*mapWidth+round(y/mapResolution); // map array cell index
+              if(x < 0.0 || y < 0.0 || x > mapHeight || y > mapWidth){
+                probValue = 0;
+              }
 
-			      if(map_index >= current_map.data.size() )
-            {
-              probValue = 0;
-            }
-            else{
-              probValue = current_map.data[map_index];
-            }
+              map_index = round(y/mapResolution)*mapHeight+round(x/mapResolution); // map array cell index
+
+  			      if(map_index >= current_map.data.size() )
+              {
+                probValue = 0;
+              }
+              else{
+                probValue = current_map.data[map_index];
+              }
 
 
-            if(probValue > 0){
-                valueSum += probValue;
+              if(probValue > 0){
+                  valueSum += probValue;
+              }
             }
         }
 
-        return 1; //valueSum;
+        return valueSum;
     }
 
     /*  Should we consider at all how near the particle is to the best guess of position?
@@ -424,7 +431,7 @@ int main(int argc, char **argv)
 
     while(ros::ok())
     {
-        
+
         //ROS_INFO("Test");
         ros::spinOnce();
 				pf_pose_est.positioningLoop();
@@ -434,4 +441,3 @@ int main(int argc, char **argv)
 
     return 0;
 }
-
