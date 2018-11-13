@@ -81,7 +81,9 @@ private:
     nav_msgs::OccupancyGrid current_map;
     //sensor_msgs::PointCloud pointcloud;
     tf::TransformListener tf_listener;
+    tf::TransformBroadcaster position_broadcaster;
     std::vector <Particle> particles;
+    ros::Time scan_time;
 
 
 public:
@@ -105,6 +107,21 @@ public:
         measurement_sub = n.subscribe<sensor_msgs::LaserScan>("/scan",1,&PfPoseNode::readScan,this);
         gridmap_sub = n.subscribe<nav_msgs::OccupancyGrid>("/smooth_map",1,&PfPoseNode::readMap,this);
         velocity_sub = n.subscribe<nav_msgs::Odometry>("/odom",1,&PfPoseNode::velocityCallback,this); //Previously /motor_controller/twist
+
+
+        geometry_msgs::Quaternion theta_quat = tf::createQuaternionMsgFromYaw(M_PI/2);
+        geometry_msgs::TransformStamped position_trans;
+        position_trans.header.stamp = scan_time; // ?
+        position_trans.header.frame_id = "odom";
+        position_trans.child_frame_id = "base_link";
+        position_trans.transform.translation.x = 0.2;
+        position_trans.transform.translation.y = 0.3;
+        position_trans.transform.translation.z = 0.0;
+        position_trans.transform.rotation = theta_quat;
+
+        position_broadcaster.sendTransform(position_trans);
+
+
     }
 
     void initializeParticles(){
@@ -296,6 +313,18 @@ public:
           position_pub.publish(position_msg);
           ROS_INFO("Publishing finished");
 
+
+          geometry_msgs::TransformStamped position_trans;
+          position_trans.header.stamp = scan_time; // ?
+          position_trans.header.frame_id = "odom";
+          position_trans.child_frame_id = "base_link";
+          position_trans.transform.translation.x = x_cof;
+          position_trans.transform.translation.y = y_cof;
+          position_trans.transform.translation.z = 0.0;
+          position_trans.transform.rotation = theta_quat;
+
+          position_broadcaster.sendTransform(position_trans);
+
         }
       }
 
@@ -331,7 +360,7 @@ public:
     }
 
     void readScan(const sensor_msgs::LaserScan scan_msg){
-
+        scan_time = scan_msg.header.stamp;
 				laser_scan_received = true;
         measurements = scan_msg.ranges;
         range_min = scan_msg.range_min;
