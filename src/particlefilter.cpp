@@ -26,7 +26,7 @@
 
 
 
-#define M 100 //Choose number of particles (will be used in fraction)
+#define M 500 //Choose number of particles (will be used in fraction)
 #define loopRate 10 //Choose how often to resample particles
 // topic /grid_map   one long vector type int8[]
 // ros MapMetaData
@@ -49,9 +49,9 @@ public:
         double r2 = ((double) rand() / (RAND_MAX));
         double r3 = ((double) rand() / (RAND_MAX));
 
-        x = r1*0.2;  //r1*mapWidth*mapResolution/10.0; //10 since we know initial pose close to origin!
-        y = r2*0.3+0.1;  //r2*mapHeight*mapResolution/10.0;
-        theta = M_PI/2 -0.2 + r3*0.4; //r3*2*M_PI; //Or does theta go from -pi to pi?
+        x = r1*2.3;//r1*0.2;  //r1*mapWidth*mapResolution; //10 since we know initial pose close to origin!
+        y = r2*2.3;//r2*0.3+0.1;  //r2*mapHeight*mapResolution;
+        theta = r3*2*M_PI;//M_PI/2 -0.2 + r3*0.4; //r3*2*M_PI; //Or does theta go from -pi to pi?
         m = 1.0;
     }
 
@@ -81,9 +81,7 @@ private:
     nav_msgs::OccupancyGrid current_map;
     //sensor_msgs::PointCloud pointcloud;
     tf::TransformListener tf_listener;
-    tf::TransformBroadcaster position_broadcaster;
     std::vector <Particle> particles;
-    ros::Time scan_time;
 
 
 public:
@@ -107,21 +105,6 @@ public:
         measurement_sub = n.subscribe<sensor_msgs::LaserScan>("/scan",1,&PfPoseNode::readScan,this);
         gridmap_sub = n.subscribe<nav_msgs::OccupancyGrid>("/smooth_map",1,&PfPoseNode::readMap,this);
         velocity_sub = n.subscribe<nav_msgs::Odometry>("/odom",1,&PfPoseNode::velocityCallback,this); //Previously /motor_controller/twist
-
-
-        geometry_msgs::Quaternion theta_quat = tf::createQuaternionMsgFromYaw(M_PI/2);
-        geometry_msgs::TransformStamped position_trans;
-        position_trans.header.stamp = scan_time; // ?
-        position_trans.header.frame_id = "odom";
-        position_trans.child_frame_id = "base_link";
-        position_trans.transform.translation.x = 0.2;
-        position_trans.transform.translation.y = 0.3;
-        position_trans.transform.translation.z = 0.0;
-        position_trans.transform.rotation = theta_quat;
-
-        position_broadcaster.sendTransform(position_trans);
-
-
     }
 
     void initializeParticles(){
@@ -190,7 +173,7 @@ public:
 
           //Define Gaussian noise   HELP: fix this!!!
           const double mean = 0.0;
-          const double stddev = 0.04;    ///0 when debugging!!!!!!!!!
+          const double stddev = 0.02;    ///0 when debugging!!!!!!!!!
           std::default_random_engine generator;
           std::normal_distribution<double> dist(mean, stddev);
           std::random_device rd{};
@@ -214,7 +197,7 @@ public:
               double theta_toCheck = particles[idx].theta + dtheta + d(gen); //maybe have more noise in radians?
 
 							//First check that the new particles will be inside of the map, otherwise just keep the old particle's pose
-              if(x_toCheck < 0.0 || y_toCheck < 0.0 || x_toCheck > mapHeight || y_toCheck > mapWidth){
+              if(x_toCheck < 0.0 || y_toCheck < 0.0 || x_toCheck > mapHeight*mapResolution || y_toCheck > mapWidth*mapResolution){
                 it->x = particles[idx].x;
                 it->y = particles[idx].y;
               }
@@ -287,7 +270,7 @@ public:
 
           //Publish the pf_pose over TF    AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA!!!!!!!!!!!!
 
-          //ROS_INFO("Publish values x: %f , y: %f and theta: %f",x_cof,y_cof,theta_cof);
+          ROS_INFO("Publish values x: %f , y: %f and theta: %f",x_cof,y_cof,theta_cof);
           geometry_msgs::Quaternion theta_quat = tf::createQuaternionMsgFromYaw(theta_cof);
           /*
                   geometry_msgs::TransformStamped pf_trans;
@@ -311,19 +294,7 @@ public:
           //position_msg.twist.twist.linear.x = linear_x; //example
           //position_msg.twist.twist.angular.z = angular_z; //example
           position_pub.publish(position_msg);
-          ROS_INFO("Publishing finished");
-
-
-          geometry_msgs::TransformStamped position_trans;
-          position_trans.header.stamp = scan_time; // ?
-          position_trans.header.frame_id = "odom";
-          position_trans.child_frame_id = "base_link";
-          position_trans.transform.translation.x = x_cof;
-          position_trans.transform.translation.y = y_cof;
-          position_trans.transform.translation.z = 0.0;
-          position_trans.transform.rotation = theta_quat;
-
-          position_broadcaster.sendTransform(position_trans);
+          //ROS_INFO("Publishing finished");
 
         }
       }
@@ -355,12 +326,12 @@ public:
         linear_x = (float) msg-> twist.twist.linear.x;   //linear.x;
         angular_z = (float) msg-> twist.twist.angular.z;   //angular.z;
 				//ROS_INFO("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
-				ROS_INFO("linear_speed %f and angular_speed %f", linear_x, angular_z);
+				//ROS_INFO("linear_speed %f and angular_speed %f", linear_x, angular_z);
         //I use both to move particles
     }
 
     void readScan(const sensor_msgs::LaserScan scan_msg){
-        scan_time = scan_msg.header.stamp;
+
 				laser_scan_received = true;
         measurements = scan_msg.ranges;
         range_min = scan_msg.range_min;
@@ -399,23 +370,24 @@ public:
         for(int i = 0; i < measurements.size(); i++)
         {
             if(measurements[i] > range_min && measurements[i] < range_max && !( std::isnan(measurements[i])) ){
-              double mapFrameAngle = particle.theta + i*angle_increment; // + M_PI/2;
+              double mapFrameAngle = particle.theta + i*angle_increment;
               x = particle.x + measurements[i]*cos(mapFrameAngle);
               y = particle.y + measurements[i]*sin(mapFrameAngle);
 
-              if(x < 0.0 || y < 0.0 || x > mapHeight || y > mapWidth){
+							//ROS_INFO("mapHeight %f and mapWidth %f ", mapHeight*mapResolution, mapWidth*mapResolution);
+              if(x < 0.0 || y < 0.0 || x > mapHeight*mapResolution || y > mapWidth*mapResolution){
                 probValue = 0;
               }
 
               map_index = round(y/mapResolution)*mapWidth+round(x/mapResolution); // map array cell index
 
-  			      if(map_index >= current_map.data.size() )
+/*  			      if(map_index >= current_map.data.size() )  //SHOULDNT BE NEEDED?
               {
                 probValue = 0;
               }
-              else{
-                probValue = current_map.data[map_index];
-              }
+              else{ */
+                probValue = current_map.data[map_index] / (1.0 + 10*measurements[i]); //Deviding to prioritize measurements nearby (more accurate)
+              //}
 
 
               if(probValue > 0){
