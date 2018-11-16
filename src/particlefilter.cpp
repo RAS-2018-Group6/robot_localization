@@ -26,8 +26,11 @@
 
 
 
-#define M 500 //Choose number of particles (will be used in fraction)
+#define M 200 //Choose number of particles (will be used in fraction)
 #define loopRate 10 //Choose how often to resample particles
+#define x_start 2.2
+#define y_start 0.2
+#define theta_start M_PI/2
 // topic /grid_map   one long vector type int8[]
 // ros MapMetaData
 // use lidar measages straight away
@@ -49,9 +52,9 @@ public:
         double r2 = ((double) rand() / (RAND_MAX));
         double r3 = ((double) rand() / (RAND_MAX));
 
-        x = r1*2.3;//r1*0.2;  //r1*mapWidth*mapResolution; //10 since we know initial pose close to origin!
-        y = r2*2.3;//r2*0.3+0.1;  //r2*mapHeight*mapResolution;
-        theta = r3*2*M_PI;//M_PI/2 -0.2 + r3*0.4; //r3*2*M_PI; //Or does theta go from -pi to pi?
+        x = r1*0.2-0.1 + x_start;//r1*0.2;  //r1*mapWidth*mapResolution; //10 since we know initial pose close to origin!
+        y = r2*0.2-0.1 + y_start;//r2*0.3+0.1;  //r2*mapHeight*mapResolution;
+        theta = r3*theta_start;//M_PI/2 -0.2 + r3*0.4; //r3*2*M_PI; //Or does theta go from -pi to pi?
         m = 1.0;
     }
 
@@ -81,6 +84,7 @@ private:
     nav_msgs::OccupancyGrid current_map;
     //sensor_msgs::PointCloud pointcloud;
     tf::TransformListener tf_listener;
+    ros::Time current_stamp;
     std::vector <Particle> particles;
 
 
@@ -88,11 +92,12 @@ public:
     ros::NodeHandle n;
 
     ros::Subscriber measurement_sub;
+    ros::Publisher measurement_pub;
     ros::Subscriber gridmap_sub;
     ros::Subscriber velocity_sub;
     ros::Publisher position_pub;
 
-    tf::TransformBroadcaster pf_pose_broadcaster;
+    tf::TransformBroadcaster pose_broadcaster;
 
     PfPoseNode(){
         n = ros::NodeHandle("~");
@@ -103,8 +108,20 @@ public:
 
         position_pub = n.advertise<nav_msgs::Odometry>("/particle_position",1);
         measurement_sub = n.subscribe<sensor_msgs::LaserScan>("/scan",1,&PfPoseNode::readScan,this);
+        measurement_pub= n.advertise<sensor_msgs::LaserScan>("/scan_modified",1); // test laserscan
         gridmap_sub = n.subscribe<nav_msgs::OccupancyGrid>("/smooth_map",1,&PfPoseNode::readMap,this);
         velocity_sub = n.subscribe<nav_msgs::Odometry>("/odom",1,&PfPoseNode::velocityCallback,this); //Previously /motor_controller/twist
+
+        geometry_msgs::Quaternion theta_quat = tf::createQuaternionMsgFromYaw(theta_start);
+        geometry_msgs::TransformStamped pose_trans;
+        pose_trans.header.stamp = ros::Time::now(); // ????
+        pose_trans.header.frame_id = "odom";
+        pose_trans.child_frame_id = "base_link";
+        pose_trans.transform.translation.x = x_start;
+        pose_trans.transform.translation.y = y_start;
+        pose_trans.transform.translation.z = 0.0;
+        pose_trans.transform.rotation = theta_quat;
+        pose_broadcaster.sendTransform(pose_trans);
     }
 
     void initializeParticles(){
@@ -118,6 +135,8 @@ public:
 
     ///////////////////// POSITIONING LOOP (PARTICLE FILTER) ////////////////////////////////////////
     void positioningLoop(){   //Resamples and broadcasts new center of mass as best guess of pose
+      current_stamp = ros::Time::now();
+
       if(map_received){
         if(laser_scan_received){
           //ROS_INFO("Running positioning loop.");
@@ -257,12 +276,21 @@ public:
               thetam_sum += theta*m;
           }
           //ROS_INFO("xm: %f, ym: %f, theta: %f", xm_sum,ym_sum,thetam_sum);
-          double x_cof = xm_sum/m_sum;
-          double y_cof = ym_sum/m_sum;
-          double theta_cof = thetam_sum/m_sum;
-          if(theta_cof<0){     //Convert back to intervall 0 to 2pi
-            theta_cof = 2*M_PI + theta_cof;
+          double x_cof, y_cof, theta_cof;
+          if(m_sum != 0){
+            x_cof = xm_sum/m_sum;
+            y_cof = ym_sum/m_sum;
+            theta_cof = thetam_sum/m_sum;
+            if(theta_cof<0){     //Convert back to intervall 0 to 2pi
+              theta_cof = 2*M_PI + theta_cof;
+            }
+          }else{
+            x_cof = 10000000; //xm_sum/m_sum;
+            y_cof = 10000000; //ym_sum/m_sum;
+            theta_cof = 10000000; //thetam_sum/m_sum;
+            ROS_INFO("M SUM IS ZERO!!!! THIS IS BAD.");
           }
+
           //Broadcast this as the estimated pose
 
 
@@ -272,20 +300,19 @@ public:
 
           ROS_INFO("Publish values x: %f , y: %f and theta: %f",x_cof,y_cof,theta_cof);
           geometry_msgs::Quaternion theta_quat = tf::createQuaternionMsgFromYaw(theta_cof);
-          /*
-                  geometry_msgs::TransformStamped pf_trans;
-                  pf_trans.header.stamp = msg_time;
-                  pf_trans.header.frame_id = "pf_pose";
-                  pf_trans.child_frame_id = "base_link";
-                  pf_trans.transform.translation.x = x_cof;
-                  pf_trans.transform.translation.y = y_cof;
-                  pf_trans.transform.translation.z = 0.0;
 
-                  pf_trans.transform.rotation = theta_quat;
 
-                  //pf_pose_broadcaster.sendTransform(pf_trans);
-                  //ROS_INFO("Position (x,y,phi) = (%f,%f,%f)", x,y,phi);
-                  */
+          geometry_msgs::TransformStamped pose_trans;
+          pose_trans.header.stamp = current_stamp; // ????
+          pose_trans.header.frame_id = "odom";
+          pose_trans.child_frame_id = "base_link";
+          pose_trans.transform.translation.x = x_cof;
+          pose_trans.transform.translation.y = y_cof;
+          pose_trans.transform.translation.z = 0.0;
+          pose_trans.transform.rotation = theta_quat;
+          pose_broadcaster.sendTransform(pose_trans);
+
+
           position_msg.header.frame_id = "/map";
           position_msg.pose.pose.position.x = x_cof;
           position_msg.pose.pose.position.y = y_cof;
@@ -318,6 +345,7 @@ public:
         mapWidth = map_msg.info.width; // number of columns (y)
         mapHeight = map_msg.info.height; // number of rows (x)
         mapResolution = map_msg.info.resolution;
+        //current_stamp = map_msg.info.stamp;
     }
 
     void velocityCallback(const nav_msgs::Odometry::ConstPtr& msg){
@@ -326,7 +354,7 @@ public:
         linear_x = (float) msg-> twist.twist.linear.x;   //linear.x;
         angular_z = (float) msg-> twist.twist.angular.z;   //angular.z;
 				//ROS_INFO("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
-				//ROS_INFO("linear_speed %f and angular_speed %f", linear_x, angular_z);
+				ROS_INFO("linear_speed %f and angular_speed %f", linear_x, angular_z);
         //I use both to move particles
     }
 
@@ -339,7 +367,25 @@ public:
         angle_min = scan_msg.angle_min;
         angle_increment = scan_msg.angle_increment; // not needed anymore
 
-        //ROS_INFO("Transform Laser scan");
+        ROS_INFO("Transform Laser scan");
+
+        // Test laser
+        sensor_msgs::LaserScan new_scan;
+        new_scan.ranges = scan_msg.ranges;
+        new_scan.range_min = scan_msg.range_min;
+        new_scan.range_max = scan_msg.range_max;
+        new_scan.header.stamp = scan_msg.header.stamp;
+        new_scan.header.frame_id = scan_msg.header.frame_id;
+        new_scan.angle_max = scan_msg.angle_max;
+        new_scan.angle_min = scan_msg.angle_min;
+        new_scan.angle_increment = scan_msg.angle_increment;
+
+        for (int i = 0; i < new_scan.ranges.size(); i++){
+          new_scan.ranges[i] = new_scan.ranges[i]*0.96;
+          measurements[i] = measurements[i]*0.96;
+        }
+
+        measurement_pub.publish(new_scan);
 
         /*
         laser_scan_received = true;
@@ -381,13 +427,13 @@ public:
 
               map_index = round(y/mapResolution)*mapWidth+round(x/mapResolution); // map array cell index
 
-/*  			      if(map_index >= current_map.data.size() )  //SHOULDNT BE NEEDED?
+  			      if(map_index >= current_map.data.size() )  //SHOULDNT BE NEEDED?
               {
                 probValue = 0;
               }
-              else{ */
-                probValue = current_map.data[map_index] / (1.0 + 10*measurements[i]); //Deviding to prioritize measurements nearby (more accurate)
-              //}
+              else{
+                probValue = current_map.data[map_index]; // / (1.0 + 10*measurements[i]); //Deviding to prioritize measurements nearby (more accurate)
+              }
 
 
               if(probValue > 0){
