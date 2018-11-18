@@ -31,6 +31,7 @@
 #define x_start 2.2
 #define y_start 0.2
 #define theta_start M_PI/2
+
 // topic /grid_map   one long vector type int8[]
 // ros MapMetaData
 // use lidar measages straight away
@@ -52,9 +53,9 @@ public:
         double r2 = ((double) rand() / (RAND_MAX));
         double r3 = ((double) rand() / (RAND_MAX));
 
-        x = r1*0.2-0.1 + x_start;//r1*0.2;  //r1*mapWidth*mapResolution; //10 since we know initial pose close to origin!
-        y = r2*0.2-0.1 + y_start;//r2*0.3+0.1;  //r2*mapHeight*mapResolution;
-        theta = r3*theta_start;//M_PI/2 -0.2 + r3*0.4; //r3*2*M_PI; //Or does theta go from -pi to pi?
+        x = r1*2.3; //r1*0.2-0.1 + x_start;//r1*0.2;  //r1*mapWidth*mapResolution; //10 since we know initial pose close to origin!
+        y = r2*2.3;// r2*0.2-0.1 + y_start;//r2*0.3+0.1;  //r2*mapHeight*mapResolution;
+        theta = r3*2*M_PI; //r3*theta_start;//M_PI/2 -0.2 + r3*0.4; //r3*2*M_PI; //Or does theta go from -pi to pi?
         m = 1.0;
     }
 
@@ -73,6 +74,7 @@ private:
     double range_max;
     double angle_min;
     double angle_increment;
+		int max_it; //numbers of iterations of the global localization before you restart 
 
     bool map_received;
     bool laser_scan_received;
@@ -130,6 +132,16 @@ public:
         //ROS_INFO("x: %f, y:%f, theta:%f,m:%f",part.x,part.y,part.theta, part.m);
         particles.push_back(part);
       }
+			max_it=50;
+    }
+
+    void reinitializeParticles(){
+      for (int i = 0; i< M;i++){
+        Particle part;
+        //ROS_INFO("x: %f, y:%f, theta:%f,m:%f",part.x,part.y,part.theta, part.m);
+        particles[i] = part;
+      }
+			max_it=50;
     }
 
 
@@ -142,6 +154,8 @@ public:
           //ROS_INFO("Running positioning loop.");
           //ros::Time msg_time = ros::Time::now();
 
+					max_it -= 1; //counter for running global localization 10 times before restaring
+					ROS_INFO("max_it %i",max_it);
 
           //Assign weights (importance factor) to particles
           double CDF[M]; //Comulative distribution function for the weights
@@ -290,29 +304,34 @@ public:
             theta_com = 10000000; //thetam_sum/m_sum;
             ROS_INFO("M SUM IS ZERO!!!! THIS IS BAD.");
           }
+//FOR GLOBAL LOCALIZATION
 	double x_error = 0.0;
 	double y_error = 0.0;
 	double theta_error = 0.0;
+  double x,y,theta; //m?
 	for(std::vector<Particle>::iterator it = particles.begin(); it != particles.end(); ++it){
-	      double x = it->x;
-              double y = it->y;
-              double theta = it->theta;
-              double m = it->m;
+	  x = it->x;
+    y = it->y;
+    theta = it->theta;
+    // m = it->m;
 		x_error += pow(x-x_com, 2);
 		y_error += pow(y-y_com, 2);
 		theta_error += pow(theta-theta_com, 2);
 	}
+
+
 	double x_var = x_error/M;
 	double y_var = y_error/M;
 	double theta_var = theta_error/M;
-	if(x_var > 0.1 || y_var > 0.1 || theta_var > 0.1){
+	if((x_var > 0.05 || y_var > 0.05 || theta_var > 0.1) && max_it < 0){
 		ROS_INFO("Uncertain pose! x_var: %f , y_var: %f and theta_var: %f",x_var,y_var,theta_var);
-	
+		reinitializeParticles();
+  	}
 		//We have now localized the lidar, but the robots center is 8 cm ahead!!! (base link)
-	x_robot = x_com + 0.08*cos(theta_com);
-	y_robot = y_com + 0.08*sin(theta_com);
-	theta_robot = theta_com;
-	
+	double x_robot = x_com + 0.08*cos(theta_com);
+	double y_robot = y_com + 0.08*sin(theta_com);
+	double theta_robot = theta_com;
+
           //Broadcast this as the estimated pose
 
 
