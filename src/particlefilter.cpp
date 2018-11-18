@@ -276,21 +276,43 @@ public:
               thetam_sum += theta*m;
           }
           //ROS_INFO("xm: %f, ym: %f, theta: %f", xm_sum,ym_sum,thetam_sum);
-          double x_cof, y_cof, theta_cof;
+          double x_com, y_com, theta_com;
           if(m_sum != 0){
-            x_cof = xm_sum/m_sum;
-            y_cof = ym_sum/m_sum;
-            theta_cof = thetam_sum/m_sum;
-            if(theta_cof<0){     //Convert back to intervall 0 to 2pi
-              theta_cof = 2*M_PI + theta_cof;
+            x_com = xm_sum/m_sum;
+            y_com = ym_sum/m_sum;
+            theta_com = thetam_sum/m_sum;
+            if(theta_com < 0){     //Convert back to intervall 0 to 2pi
+              theta_com = 2*M_PI + theta_com;
             }
           }else{
-            x_cof = 10000000; //xm_sum/m_sum;
-            y_cof = 10000000; //ym_sum/m_sum;
-            theta_cof = 10000000; //thetam_sum/m_sum;
+            x_com = 10000000; //xm_sum/m_sum;
+            y_com = 10000000; //ym_sum/m_sum;
+            theta_com = 10000000; //thetam_sum/m_sum;
             ROS_INFO("M SUM IS ZERO!!!! THIS IS BAD.");
           }
-
+	double x_error = 0.0;
+	double y_error = 0.0;
+	double theta_error = 0.0;
+	for(std::vector<Particle>::iterator it = particles.begin(); it != particles.end(); ++it){
+	      double x = it->x;
+              double y = it->y;
+              double theta = it->theta;
+              double m = it->m;
+		x_error += pow(x-x_com, 2);
+		y_error += pow(y-y_com, 2);
+		theta_error += pow(theta-theta_com, 2);
+	}
+	double x_var = x_error/M;
+	double y_var = y_error/M;
+	double theta_var = theta_error/M;
+	if(x_var > 0.1 || y_var > 0.1 || theta_var > 0.1){
+		ROS_INFO("Uncertain pose! x_var: %f , y_var: %f and theta_var: %f",x_var,y_var,theta_var);
+	
+		//We have now localized the lidar, but the robots center is 8 cm ahead!!! (base link)
+	x_robot = x_com + 0.08*cos(theta_com);
+	y_robot = y_com + 0.08*sin(theta_com);
+	theta_robot = theta_com;
+	
           //Broadcast this as the estimated pose
 
 
@@ -298,24 +320,24 @@ public:
 
           //Publish the pf_pose over TF    AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA!!!!!!!!!!!!
 
-          ROS_INFO("Publish values x: %f , y: %f and theta: %f",x_cof,y_cof,theta_cof);
-          geometry_msgs::Quaternion theta_quat = tf::createQuaternionMsgFromYaw(theta_cof);
+          ROS_INFO("Publish values x: %f , y: %f and theta: %f",x_robot,y_robot,theta_robot);
+          geometry_msgs::Quaternion theta_quat = tf::createQuaternionMsgFromYaw(theta_robot);
 
 
           geometry_msgs::TransformStamped pose_trans;
           pose_trans.header.stamp = current_stamp; // ????
           pose_trans.header.frame_id = "odom";
           pose_trans.child_frame_id = "base_link";
-          pose_trans.transform.translation.x = x_cof;
-          pose_trans.transform.translation.y = y_cof;
+          pose_trans.transform.translation.x = x_robot;
+          pose_trans.transform.translation.y = y_robot;
           pose_trans.transform.translation.z = 0.0;
           pose_trans.transform.rotation = theta_quat;
           pose_broadcaster.sendTransform(pose_trans);
 
 
           position_msg.header.frame_id = "/map";
-          position_msg.pose.pose.position.x = x_cof;
-          position_msg.pose.pose.position.y = y_cof;
+          position_msg.pose.pose.position.x = x_robot;
+          position_msg.pose.pose.position.y = y_robot;
           position_msg.pose.pose.position.z = 0;
           position_msg.pose.pose.orientation = theta_quat;
           //position_msg.twist.twist.linear.x = linear_x; //example
