@@ -27,7 +27,7 @@
 
 
 
-#define M 100 //Choose number of particles (will be used in fraction)
+#define M 200 //Choose number of particles (will be used in fraction)
 #define loopRate 25 //Choose how often to resample particles
 #define x_start 2.2
 #define y_start 0.2
@@ -57,7 +57,7 @@ public:
 	//SOMETHING IS WIERD HERE! STARTING WITH x_start INLUENCES THE FILTER EVEN AFTER INITIALIZATION!!!
         x = r1*0.2-0.1 + 2.2;// x_start; //r1*2.45; //r1*0.2-0.1 + x_start; //r1*mapWidth*mapResolution;
         y = r2*0.2-0.1 + 0.2;//y_start;// r2*2.45;// r2*0.2-0.1 + y_start;//r2*0.3+0.1;  //r2*mapHeight*mapResolution;
-        theta = r3* M_PI/2;//theta_start; //r3*theta_start;//M_PI/2 -0.2 + r3*0.4; //r3*2*M_PI; //Or does theta go from -pi to pi?
+        theta = r3*0.2 -0.1 + M_PI/2;//theta_start; //r3*theta_start;//M_PI/2 -0.2 + r3*0.4; //r3*2*M_PI; //Or does theta go from -pi to pi?
         m = 1.0;
     }
 
@@ -222,17 +222,22 @@ public:
 	//	dx = dx_robotframe*cos(theta_cof) - dy_robotframe*cos(M_PI/2 - theta_cof);
 	//	dy = dx_robotframe*sin(theta_cof) + dy_robotframe*sin(M_PI/2 - theta_cof);
           }
-
+//          ROS_INFO("Resample");
           //Define Gaussian noise   HELP: fix this!!!
           const double mean = 0.0;
-          const double stddev = 0.03;    ///0 when debugging!!!!!!!!!
+          double stddev;
+          if(v == 0.0 && omega == 0.0){
+            stddev = 0.00;
+          }
+          else{
+            stddev = 0.03;    ///0 when debugging!!!!!!!!!
+          }
           std::default_random_engine generator;
           std::normal_distribution<double> dist(mean, stddev);
           std::random_device rd{};
           std::mt19937 gen{rd()};
 
           std::normal_distribution<double> d{mean, stddev};
-          ROS_INFO("Resample");
           int idx = 0;
           for(std::vector<Particle>::iterator it = new_particles.begin(); it != new_particles.end(); ++it)
           {
@@ -309,15 +314,26 @@ public:
                 //ROS_INFO("Turned %f into %f", theta, theta - 2*M_PI);
                 theta -= 2*M_PI;
               }     */
-              thetasin_sum += sin(theta); //*m;
-							thetacos_sum += cos(theta);
+              ROS_INFO("theta = %f sintheta = %f", theta, sin(theta));
+              thetasin_sum += sin(theta)*m; //*m;
+							thetacos_sum += cos(theta)*m;
           }
           //ROS_INFO("xm: %f, ym: %f, theta: %f", xm_sum,ym_sum,thetam_sum);
-          double x_com, y_com, theta_com;
+          double x_com, y_com, theta_com, thetasin_com, thetacos_com;
           if(m_sum != 0){
             x_com = xm_sum/m_sum;
             y_com = ym_sum/m_sum;
-            theta_com = most_prob_theta;// atan(thetasin_sum / thetacos_sum);   //thetam_sum/M; ///m_sum;
+            thetasin_com = thetasin_sum/m_sum;
+            thetacos_com = thetacos_sum/m_sum;
+            if(thetacos_sum == 0.0){
+              if(thetasin_sum > 0.0){
+                theta_com = M_PI/2;
+              }
+              else{
+                theta_com = -M_PI/2;
+              }
+            }
+            theta_com =  atan2(thetasin_com,thetacos_com);//most_prob_theta;   //thetam_sum/M; ///m_sum;
 						if(theta_com < 0.0){
 							ROS_INFO("Turned %f into %f", theta_com, theta_com+2*M_PI);
 							theta_com += 2*M_PI;
