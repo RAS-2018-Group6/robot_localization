@@ -28,7 +28,7 @@
 
 
 #define M 200 //Choose number of particles (will be used in fraction)
-#define loopRate 25 //Choose how often to resample particles
+#define loopRate 10 //Choose how often to resample particles
 #define x_start 2.2
 #define y_start 0.2
 #define theta_start M_PI/2
@@ -465,8 +465,8 @@ public:
         new_scan.angle_increment = scan_msg.angle_increment;
 
         for (int i = 0; i < new_scan.ranges.size(); i++){
-          new_scan.ranges[i] = new_scan.ranges[i];//*0.96;
-          measurements[i] = measurements[i];//*0.96;
+          new_scan.ranges[i] = new_scan.ranges[i]*(1-0.03*measurements[i]);
+          measurements[i] = measurements[i]*(1-0.03*measurements[i]);
         }
 
         measurement_pub.publish(new_scan);
