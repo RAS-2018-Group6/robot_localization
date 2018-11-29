@@ -403,6 +403,7 @@ public:
           position_msg.pose.pose.position.y = y_robot;
           position_msg.pose.pose.position.z = 0;
           position_msg.pose.pose.orientation = theta_quat;
+          position_msg.twist.twist.linear.x = linear_x;
           //position_msg.twist.twist.linear.x = linear_x; //example
           //position_msg.twist.twist.angular.z = angular_z; //example
           position_pub.publish(position_msg);

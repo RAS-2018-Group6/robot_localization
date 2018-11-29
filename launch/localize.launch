@@ -1,0 +1,7 @@
+<launch>
+
+  <node pkg="robot_localization" type="particle_filter" name="particle_filter" output="screen"/>
+
+  <include file="$(find robot_map)/launch/map.launch"/>
+
+</launch>
