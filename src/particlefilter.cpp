@@ -55,8 +55,8 @@ public:
         double r3 = ((double) rand() / (RAND_MAX));
 
 	//SOMETHING IS WIERD HERE! STARTING WITH x_start INLUENCES THE FILTER EVEN AFTER INITIALIZATION!!!
-        x = r1*0.2-0.1 + 2.2;// x_start; //r1*2.45; //r1*0.2-0.1 + x_start; //r1*mapWidth*mapResolution;
-        y = r2*0.2-0.1 + 0.2;//y_start;// r2*2.45;// r2*0.2-0.1 + y_start;//r2*0.3+0.1;  //r2*mapHeight*mapResolution;
+        x = r1*0.2-0.1 + 0.23;// x_start; //r1*2.45; //r1*0.2-0.1 + x_start; //r1*mapWidth*mapResolution;
+        y = r2*0.2-0.1 + 0.25;//y_start;// r2*2.45;// r2*0.2-0.1 + y_start;//r2*0.3+0.1;  //r2*mapHeight*mapResolution;
         theta = r3*0.2 -0.1 + M_PI/2;//theta_start; //r3*theta_start;//M_PI/2 -0.2 + r3*0.4; //r3*2*M_PI; //Or does theta go from -pi to pi?
         m = 1.0;
     }
@@ -163,7 +163,7 @@ public:
           //ros::Time msg_time = ros::Time::now();
 
 					max_it -= 1; //counter for running global localization 10 times before restaring
-					ROS_INFO("max_it %i",max_it);
+					//ROS_INFO("max_it %i",max_it);
 
           //Assign weights (importance factor) to particles
           double CDF[M]; //Comulative distribution function for the weights
@@ -314,7 +314,7 @@ public:
                 //ROS_INFO("Turned %f into %f", theta, theta - 2*M_PI);
                 theta -= 2*M_PI;
               }     */
-              ROS_INFO("theta = %f sintheta = %f", theta, sin(theta));
+              //ROS_INFO("theta = %f sintheta = %f", theta, sin(theta));
               thetasin_sum += sin(theta)*m; //*m;
 							thetacos_sum += cos(theta)*m;
           }
@@ -335,7 +335,7 @@ public:
             }
             theta_com =  atan2(thetasin_com,thetacos_com);//most_prob_theta;   //thetam_sum/M; ///m_sum;
 						if(theta_com < 0.0){
-							ROS_INFO("Turned %f into %f", theta_com, theta_com+2*M_PI);
+							//ROS_INFO("Turned %f into %f", theta_com, theta_com+2*M_PI);
 							theta_com += 2*M_PI;
 						}
           /*  if(theta_com < 0){     //Convert back to intervall 0 to 2pi
@@ -346,7 +346,7 @@ public:
             x_com = 10000000; //xm_sum/m_sum;
             y_com = 10000000; //ym_sum/m_sum;
             theta_com = 10000000; //thetam_sum/m_sum;
-            ROS_INFO("M SUM IS ZERO!!!! THIS IS BAD.");
+            //ROS_INFO("M SUM IS ZERO!!!! THIS IS BAD.");
           }
 //FOR GLOBAL LOCALIZATION
 	double x_error = 0.0;
@@ -368,7 +368,7 @@ public:
 	double y_var = y_error/M;
 	double theta_var = theta_error/M;
 	if((x_var > 0.05 || y_var > 0.05 || theta_var > 0.1) && max_it < 0){
-		ROS_INFO("Uncertain pose! x_var: %f , y_var: %f and theta_var: %f",x_var,y_var,theta_var);
+		//ROS_INFO("Uncertain pose! x_var: %f , y_var: %f and theta_var: %f",x_var,y_var,theta_var);
 		//reinitializeParticles();      //Turn
   	}
 		//We have now localized the lidar, but the robots center is 8 cm ahead!!! (base link)
@@ -439,7 +439,7 @@ public:
         //ROS_INFO("Velocity callback");
         linear_x = (float) msg-> twist.twist.linear.x;   //linear.x;
         angular_z = (float) msg-> twist.twist.angular.z;   //angular.z;
-				ROS_INFO("linear_speed %f and angular_speed %f", linear_x, angular_z);
+				//ROS_INFO("linear_speed %f and angular_speed %f", linear_x, angular_z);
         //I use both to move particles
     }
 
@@ -452,7 +452,7 @@ public:
         angle_min = scan_msg.angle_min;
         angle_increment = scan_msg.angle_increment; // not needed anymore
 
-        ROS_INFO("Transform Laser scan");
+        //ROS_INFO("Transform Laser scan");
 
         // Test laser
         sensor_msgs::LaserScan new_scan;
