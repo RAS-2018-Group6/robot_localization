@@ -54,7 +54,7 @@ public:
         double r2 = ((double) rand() / (RAND_MAX));
         double r3 = ((double) rand() / (RAND_MAX));
 
-	//SOMETHING IS WIERD HERE! STARTING WITH x_start INLUENCES THE FILTER EVEN AFTER INITIALIZATION!!!
+  //SOMETHING IS WIERD HERE! STARTING WITH x_start INLUENCES THE FILTER EVEN AFTER INITIALIZATION!!!
         x = r1*0.2-0.1 + 0.23;// x_start; //r1*2.45; //r1*0.2-0.1 + x_start; //r1*mapWidth*mapResolution;
         y = r2*0.2-0.1 + 0.25;//y_start;// r2*2.45;// r2*0.2-0.1 + y_start;//r2*0.3+0.1;  //r2*mapHeight*mapResolution;
         theta = r3*0.2 -0.1 + M_PI/2;//theta_start; //r3*theta_start;//M_PI/2 -0.2 + r3*0.4; //r3*2*M_PI; //Or does theta go from -pi to pi?
@@ -76,7 +76,7 @@ private:
     double range_max;
     double angle_min;
     double angle_increment;
-		int max_it; //numbers of iterations of the global localization before you restart
+    int max_it; //numbers of iterations of the global localization before you restart
 
     bool map_received;
     bool laser_scan_received;
@@ -90,7 +90,7 @@ private:
     tf::TransformListener tf_listener;
     ros::Time current_stamp;
     std::vector <Particle> particles;
-		geometry_msgs::PoseArray particle_msg;
+    geometry_msgs::PoseArray particle_msg;
 
 
 public:
@@ -112,8 +112,8 @@ public:
         map_received = false;
         laser_scan_received = false;
 
-				particle_msg.poses.resize(M);
-				particle_msg.header.frame_id = "/map";
+        particle_msg.poses.resize(M);
+        particle_msg.header.frame_id = "/map";
 
         position_pub = n.advertise<nav_msgs::Odometry>("/particle_position",1);
         particles_pub = n.advertise<geometry_msgs::PoseArray>("/particles_poses",1);
@@ -140,7 +140,7 @@ public:
         //ROS_INFO("x: %f, y:%f, theta:%f,m:%f",part.x,part.y,part.theta, part.m);
         particles.push_back(part);
       }
-			max_it=30;
+      max_it=30;
     }
 
     void reinitializeParticles(){
@@ -149,7 +149,7 @@ public:
         //ROS_INFO("x: %f, y:%f, theta:%f,m:%f",part.x,part.y,part.theta, part.m);
         particles[i] = part;
       }
-			max_it=30;
+      max_it=30;
     }
 
 
@@ -162,39 +162,39 @@ public:
           //ROS_INFO("Running positioning loop.");
           //ros::Time msg_time = ros::Time::now();
 
-					max_it -= 1; //counter for running global localization 10 times before restaring
-					//ROS_INFO("max_it %i",max_it);
+          max_it -= 1; //counter for running global localization 10 times before restaring
+          //ROS_INFO("max_it %i",max_it);
 
           //Assign weights (importance factor) to particles
           double CDF[M]; //Comulative distribution function for the weights
           double cumsum = 0;
-					double maxweight = 0;
-					double most_prob_theta = 0;
+          double maxweight = 0;
+          double most_prob_theta = 0;
           //ROS_INFO("Get Weights of particles");
           int i = 0;
           for(std::vector<Particle>::iterator it = particles.begin(); it != particles.end(); ++it)
           {
-							particle_msg.poses[i].position.x = it->x;
-							particle_msg.poses[i].position.y = it->y;
-							particle_msg.poses[i].orientation = tf::createQuaternionMsgFromYaw(it->theta);
+              particle_msg.poses[i].position.x = it->x;
+              particle_msg.poses[i].position.y = it->y;
+              particle_msg.poses[i].orientation = tf::createQuaternionMsgFromYaw(it->theta);
               it->m = get_weight(*it);  //updates weight
-							if( (it->m) > maxweight){
-								maxweight = it->m;
-								most_prob_theta = it->theta;
-							}
+              if( (it->m) > maxweight){
+                maxweight = it->m;
+                most_prob_theta = it->theta;
+              }
 
               cumsum += (double) it->m;   //use the weight for the CDF, double as to compare with r below
               CDF[i] = cumsum;  //Not normalized, therefor use final cumsum to compute r below
               i += 1;
           }
 
-					particles_pub.publish(particle_msg);
+          particles_pub.publish(particle_msg);
 
           for(std::vector<Particle>::iterator it = particles.begin(); it != particles.end(); ++it){
             //ROS_INFO("x: %f, y: %f, theta: %f, weight: %f",it->x,it->y,it->theta,it->m);
           }
           //Resample M new particles randomly according to weight
-  		    std::vector <Particle> new_particles(M);
+          std::vector <Particle> new_particles(M);
           int ind = 0;
 
           //And move particles based on control input (speeds) with added noise
@@ -205,24 +205,21 @@ public:
           if(omega == 0.0){
             dx = v*dt; //_robotframe
             dy = 0.0;
-						dtheta = 0.0;
-		//change to mapframe
-	//	dx = dx_robotframe*cos(theta_cof) - dy_robotframe*cos(M_PI/2 - theta_cof)
+            dtheta = 0.0;
+    //change to mapframe
+  //  dx = dx_robotframe*cos(theta_cof) - dy_robotframe*cos(M_PI/2 - theta_cof)
           }
-					else if(v == 0.0){
-						dx = 0.0;
-						dy = 0.0;
-						dtheta = omega*dt;
-					}
+          else if(v == 0.0){
+            dx = 0.0;
+            dy = 0.0;
+            dtheta = omega*dt;
+          }
           else{
             dx = v/omega * sin(omega*dt);
             dy = v/omega *( 1 - cos(omega*dt) );
-						dtheta = omega*dt;
-		//Change to mapframe, now taken care i
-	//	dx = dx_robotframe*cos(theta_cof) - dy_robotframe*cos(M_PI/2 - theta_cof);
-	//	dy = dx_robotframe*sin(theta_cof) + dy_robotframe*sin(M_PI/2 - theta_cof);
+            dtheta = omega*dt;
           }
-//          ROS_INFO("Resample");
+          //ROS_INFO("Resample");
           //Define Gaussian noise   HELP: fix this!!!
           const double mean = 0.0;
           double stddev;
@@ -248,12 +245,12 @@ public:
                   idx ++;
               }
               //ROS_INFO("Index: %i, Random: %f", idx,r);
-							double w = particles[idx].theta;
+              double w = particles[idx].theta;
               double x_toCheck = particles[idx].x + dx*cos(w) + dy*sin(M_PI/2-w) + d(gen); //Gaussian noise
               double y_toCheck = particles[idx].y + dx*sin(w) - dy*cos(M_PI/2-w) + d(gen);
               double theta_toCheck = particles[idx].theta + dtheta + 3*d(gen); //maybe have more noise in radians?
 
-							//First check that the new particles will be inside of the map, otherwise just keep the old particle's pose
+              //First check that the new particles will be inside of the map, otherwise just keep the old particle's pose
               if(x_toCheck < 0.0 || y_toCheck < 0.0 || x_toCheck > mapHeight*mapResolution || y_toCheck > mapWidth*mapResolution){
                 it->x = particles[idx].x;
                 it->y = particles[idx].y;
@@ -262,20 +259,16 @@ public:
                 it->x = x_toCheck;
                 it->y = y_toCheck;
               }
-							if(theta_toCheck > 2*M_PI){
-								it->theta = theta_toCheck - 2*M_PI;
-							}
-							else if(theta_toCheck < 0){
-								it->theta = 2*M_PI-theta_toCheck;
-							}
+              if(theta_toCheck > 2*M_PI){
+                it->theta = theta_toCheck - 2*M_PI;
+              }
+              else if(theta_toCheck < 0){
+                it->theta = 2*M_PI-theta_toCheck;
+              }
               else{
-								it->theta = theta_toCheck;
-							}
+                it->theta = theta_toCheck;
+              }
           }
-
-          /* for(std::vector<Particle>::iterator it = new_particles.begin(); it != new_particles.end(); ++it){
-            ROS_INFO("x: %f, y: %f, theta: %f, weight: %f",it->x,it->y,it->theta,it->m);
-          } */
 
 
           //Check degeneracy:
@@ -283,12 +276,7 @@ public:
           //if almost all weight extremely small:
           //resample
 
-          particles = new_particles; //Seems to work for vectors?//HELP: Pointers more efficient?
-
-  //        for(int i=0; i< M; i++){    //If above doesnt work
-   //           particles[i] = new_particles[i];
-    //      }
-
+          particles = new_particles;
           //The center of mass of the particles will give the best estimate of the position:
 
           //WHAT TO DO IF PARTICLES SPRED OUT IN DIFFERENT BUNCHES?
@@ -296,8 +284,8 @@ public:
           double xm_sum = 0;
           double ym_sum = 0;
           //double thetam_sum = 0;
-					double thetasin_sum = 0;
-					double thetacos_sum = 0;
+          double thetasin_sum = 0;
+          double thetacos_sum = 0;
           //ROS_INFO("Get Center of Mass");
           for(std::vector<Particle>::iterator it = particles.begin(); it != particles.end(); ++it){
               double x = it->x;
@@ -310,13 +298,9 @@ public:
               xm_sum += x*m;
               ym_sum += y*m;
               //ROS_INFO("THETA %f", theta);
-/*              if(theta > M_PI){      //Convert to interval -pi to pi for summing
-                //ROS_INFO("Turned %f into %f", theta, theta - 2*M_PI);
-                theta -= 2*M_PI;
-              }     */
               //ROS_INFO("theta = %f sintheta = %f", theta, sin(theta));
               thetasin_sum += sin(theta)*m; //*m;
-							thetacos_sum += cos(theta)*m;
+              thetacos_sum += cos(theta)*m;
           }
           //ROS_INFO("xm: %f, ym: %f, theta: %f", xm_sum,ym_sum,thetam_sum);
           double x_com, y_com, theta_com, thetasin_com, thetacos_com;
@@ -334,10 +318,10 @@ public:
               }
             }
             theta_com =  atan2(thetasin_com,thetacos_com);//most_prob_theta;   //thetam_sum/M; ///m_sum;
-						if(theta_com < 0.0){
-							//ROS_INFO("Turned %f into %f", theta_com, theta_com+2*M_PI);
-							theta_com += 2*M_PI;
-						}
+            if(theta_com < 0.0){
+              //ROS_INFO("Turned %f into %f", theta_com, theta_com+2*M_PI);
+              theta_com += 2*M_PI;
+            }
           /*  if(theta_com < 0){     //Convert back to intervall 0 to 2pi
               theta_com += 2*M_PI;
             } */
@@ -349,32 +333,32 @@ public:
             //ROS_INFO("M SUM IS ZERO!!!! THIS IS BAD.");
           }
 //FOR GLOBAL LOCALIZATION
-	double x_error = 0.0;
-	double y_error = 0.0;
-	double theta_error = 0.0;
+  double x_error = 0.0;
+  double y_error = 0.0;
+  double theta_error = 0.0;
   double x,y,theta; //m?
-	for(std::vector<Particle>::iterator it = particles.begin(); it != particles.end(); ++it){
-	  x = it->x;
+  for(std::vector<Particle>::iterator it = particles.begin(); it != particles.end(); ++it){
+    x = it->x;
     y = it->y;
     theta = it->theta;
     // m = it->m;
-		x_error += pow(x-x_com, 2);
-		y_error += pow(y-y_com, 2);
-		theta_error += pow(theta-theta_com, 2);
-	}
+    x_error += pow(x-x_com, 2);
+    y_error += pow(y-y_com, 2);
+    theta_error += pow(theta-theta_com, 2);
+  }
 
 
-	double x_var = x_error/M;
-	double y_var = y_error/M;
-	double theta_var = theta_error/M;
-	if((x_var > 0.05 || y_var > 0.05 || theta_var > 0.1) && max_it < 0){
-		//ROS_INFO("Uncertain pose! x_var: %f , y_var: %f and theta_var: %f",x_var,y_var,theta_var);
-		//reinitializeParticles();      //Turn
-  	}
-		//We have now localized the lidar, but the robots center is 8 cm ahead!!! (base link)
-	double x_robot = x_com + 0.08*cos(theta_com);
-	double y_robot = y_com + 0.08*sin(theta_com);
-	double theta_robot = theta_com;
+  double x_var = x_error/M;
+  double y_var = y_error/M;
+  double theta_var = theta_error/M;
+  if((x_var > 0.05 || y_var > 0.05 || theta_var > 0.1) && max_it < 0){
+    //ROS_INFO("Uncertain pose! x_var: %f , y_var: %f and theta_var: %f",x_var,y_var,theta_var);
+    //reinitializeParticles();      //Turn
+    }
+    //We have now localized the lidar, but the robots center is 8 cm ahead!!! (base link)
+  double x_robot = x_com + 0.08*cos(theta_com);
+  double y_robot = y_com + 0.08*sin(theta_com);
+  double theta_robot = theta_com;
 
           //Broadcast this as the estimated pose
 
@@ -439,13 +423,13 @@ public:
         //ROS_INFO("Velocity callback");
         linear_x = (float) msg-> twist.twist.linear.x;   //linear.x;
         angular_z = (float) msg-> twist.twist.angular.z;   //angular.z;
-				//ROS_INFO("linear_speed %f and angular_speed %f", linear_x, angular_z);
+        //ROS_INFO("linear_speed %f and angular_speed %f", linear_x, angular_z);
         //I use both to move particles
     }
 
     void readScan(const sensor_msgs::LaserScan scan_msg){
 
-				laser_scan_received = true;
+        laser_scan_received = true;
         measurements = scan_msg.ranges;
         range_min = scan_msg.range_min;
         range_max = scan_msg.range_max;
@@ -505,14 +489,14 @@ public:
               x = particle.x + measurements[i]*cos(mapFrameAngle);
               y = particle.y + measurements[i]*sin(mapFrameAngle);
 
-							//ROS_INFO("mapHeight %f and mapWidth %f ", mapHeight*mapResolution, mapWidth*mapResolution);
+              //ROS_INFO("mapHeight %f and mapWidth %f ", mapHeight*mapResolution, mapWidth*mapResolution);
               if(x < 0.0 || y < 0.0 || x > mapHeight*mapResolution || y > mapWidth*mapResolution){
                 probValue = 0;
               }
 
               map_index = round(y/mapResolution)*mapWidth+round(x/mapResolution); // map array cell index
 
-  			      if(map_index >= current_map.data.size() )  //SHOULDNT BE NEEDED?
+              if(map_index >= current_map.data.size() )  //SHOULDNT BE NEEDED?
               {
                 probValue = 0;
               }
@@ -566,7 +550,7 @@ int main(int argc, char **argv)
 
         //ROS_INFO("Test");
         ros::spinOnce();
-				pf_pose_est.positioningLoop();
+        pf_pose_est.positioningLoop();
         loop_rate.sleep();
         //ROS_INFO("The main loop");
     }
